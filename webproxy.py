@@ -5,7 +5,8 @@ import shutil
 
 
 class WebProxy(http.server.BaseHTTPRequestHandler):
-    proxy_url = "http://www.apple.com/"
+    proxy_url = "http://orange.tw/"
+    server_path = "localhost:8000"
 
     def do_GET(self):
         """Serve a GET requests."""
@@ -17,18 +18,26 @@ class WebProxy(http.server.BaseHTTPRequestHandler):
                 f.close()
 
     def get_website(self):
-        """Get webview"""
+        """Get WebView"""
         path = self.proxy_url + self.path[1:]
-        respone = get(path)
-        self.send_response(respone.status_code)
+        response = get(path)
+        # redirect browser
+        if response.history:
+            response = response.history.pop()
+        self.send_response(response.status_code)
         f = io.BytesIO()
-        f.write(respone.content)
+        # Replace all url to proxy path.
+        f.write(response.content.replace(bytes(response.url.split("/")[2],
+                                               "utf8"),
+                                         bytes(self.server_path, "utf8")))
         f.seek(0)
-        for title, content in respone.headers.items():
-            print(type(title), title)
-            if title not in ["Server", "Content-Encoding", "Content-Length",
-                             "Date"]:
+        for title, content in response.headers.items():
+            if title.lower() not in ["server", "content-encoding",
+                                     "content-length", "date"]:
+                if title.lower() in "location":
+                    content = content.replace(response.url.split("/")[2],
+                                              self.server_path)
                 self.send_header(title, content)
-        self.send_header("Content-Length", str(len(respone.content)))
+        self.send_header("Content-Length", str(len(response.content)))
         self.end_headers()
         return f
